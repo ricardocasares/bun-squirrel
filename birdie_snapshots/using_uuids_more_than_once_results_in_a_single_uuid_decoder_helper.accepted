@@ -1,0 +1,59 @@
+---
+version: 1.5.1
+title: using uuids more than once results in a single uuid decoder helper
+file: ./test/squirrel_test.gleam
+test_name: using_uuids_more_than_once_results_in_a_single_uuid_decoder_helper_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+import youid/uuid.{type Uuid}
+
+pub type OneRow {
+  OneRow(gen_random_uuid: Uuid)
+}
+
+pub fn one(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(OneRow), sql.SqlError)) {
+  let decoder = {
+    use gen_random_uuid <- decode.field(0, uuid_decoder())
+    decode.success(OneRow(gen_random_uuid:))
+  }
+
+  "select gen_random_uuid()"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+pub type OtherRow {
+  OtherRow(gen_random_uuid: Uuid)
+}
+
+pub fn other(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(OtherRow), sql.SqlError)) {
+  let decoder = {
+    use gen_random_uuid <- decode.field(0, uuid_decoder())
+    decode.success(OtherRow(gen_random_uuid:))
+  }
+
+  "select gen_random_uuid()"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn uuid_decoder() {
+  use string <- decode.then(decode.string)
+  case uuid.from_string(string) {
+    Ok(uuid) -> decode.success(uuid)
+    Error(_) -> decode.failure(uuid.v7(), "Uuid")
+  }
+}
+

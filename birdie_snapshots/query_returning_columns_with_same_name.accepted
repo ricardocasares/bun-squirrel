@@ -1,0 +1,17 @@
+---
+version: 1.3.0
+title: query returning columns with same name
+file: ./test/squirrel_test.gleam
+test_name: query_returning_columns_with_same_name_test
+---
+[31m[1mError: [22mDuplicate names[39m
+
+    [2m╭─ query.sql[22m
+    [2m│[22m
+[2m  1 │ [22m[36mselect[39m
+[2m  2 │ [22m    [32m1[39m [36mas[39m duplicate,
+[2m  3 │ [22m    [32m2[39m [36mas[39m duplicate,
+[2m  4 │ [22m    [32m3[39m [36mas[39m not_duplicate
+    [2m┆[22m
+
+This query returns multiple values sharing the same name: `duplicate`.

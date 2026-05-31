@@ -1,0 +1,39 @@
+---
+version: 1.5.1
+title: left join columns are optional
+file: ./test/squirrel_test.gleam
+test_name: left_join_columns_are_optional_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+import gleam/option.{type Option}
+
+pub type QueryRow {
+  QueryRow(not_optional: String, optional: Option(String))
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use not_optional <- decode.field(0, decode.string)
+    use optional <- decode.field(1, decode.optional(decode.string))
+    decode.success(QueryRow(not_optional:, optional:))
+  }
+
+  "
+select
+  s1.name as not_optional,
+  s2.name as optional
+from
+  squirrel s1
+  left join squirrel s2 using(name)
+"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+

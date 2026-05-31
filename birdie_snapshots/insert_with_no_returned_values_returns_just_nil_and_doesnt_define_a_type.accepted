@@ -1,0 +1,23 @@
+---
+version: 1.5.1
+title: insert with no returned values returns just nil and doesnt define a type
+file: ./test/squirrel_test.gleam
+test_name: insert_with_no_returned_values_returns_just_nil_and_doesnt_define_a_type_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(Nil), sql.SqlError)) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "insert into squirrel values ('sandy', 1000)"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+

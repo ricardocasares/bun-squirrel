@@ -1,0 +1,57 @@
+---
+version: 1.5.1
+title: nullability with foreign key
+file: ./test/squirrel_test.gleam
+test_name: nullability_with_foreign_key_condition_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/int
+import gleam/javascript/promise
+import gleam/option.{type Option}
+
+pub type QueryRow {
+  QueryRow(item_id: Int, name: Option(String))
+}
+
+pub fn query(
+  db: sql.Connection,
+  arg_1: Int,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use item_id <- decode.field(0, int_decoder())
+    use name <- decode.field(1, decode.optional(decode.string))
+    decode.success(QueryRow(item_id:, name:))
+  }
+
+  "
+select
+  item_issue43.item_id,
+  category_issue43.name
+from
+  item_issue43
+  left join category_issue43 using(category_id)
+where
+  item_issue43.site_id = $1;
+"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.parameter(sql.int(arg_1))
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn int_decoder() {
+  decode.one_of(decode.int, or: [
+    {
+      use string <- decode.then(decode.string)
+      case int.parse(string) {
+        Ok(int) -> decode.success(int)
+        Error(_) -> decode.failure(0, "Int")
+      }
+    },
+  ])
+}
+

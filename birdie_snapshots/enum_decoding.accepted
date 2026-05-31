@@ -1,0 +1,47 @@
+---
+version: 1.5.1
+title: enum decoding
+file: ./test/squirrel_test.gleam
+test_name: enum_decoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+
+pub type QueryRow {
+  QueryRow(squirrel_colour: SquirrelColour)
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use squirrel_colour <- decode.field(0, squirrel_colour_decoder())
+    decode.success(QueryRow(squirrel_colour:))
+  }
+
+  "select 'red'::squirrel_colour"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+pub type SquirrelColour {
+  LightBrown
+  Grey
+  Red
+}
+
+fn squirrel_colour_decoder() -> decode.Decoder(SquirrelColour) {
+  use squirrel_colour <- decode.then(decode.string)
+  case squirrel_colour {
+    "light brown" -> decode.success(LightBrown)
+    "grey" -> decode.success(Grey)
+    "red" -> decode.success(Red)
+    _ -> decode.failure(LightBrown, "SquirrelColour")
+  }
+}
+

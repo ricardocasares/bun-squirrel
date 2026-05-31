@@ -1,0 +1,54 @@
+---
+version: 1.5.1
+title: left join nullability inference
+file: ./test/squirrel_test.gleam
+test_name: left_join_nullability_inference_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/int
+import gleam/javascript/promise
+import gleam/option.{type Option}
+
+pub type QueryRow {
+  QueryRow(user_id: Int, roles: Option(String))
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use user_id <- decode.field(0, int_decoder())
+    use roles <- decode.field(1, decode.optional(decode.string))
+    decode.success(QueryRow(user_id:, roles:))
+  }
+
+  "
+select
+  users_issue41.user_id,
+  profile_issue41.roles
+from
+  users_issue41
+  left join profile_issue41
+    on profile_issue41.user_id = users_issue41.user_id;
+"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn int_decoder() {
+  decode.one_of(decode.int, or: [
+    {
+      use string <- decode.then(decode.string)
+      case int.parse(string) {
+        Ok(int) -> decode.success(int)
+        Error(_) -> decode.failure(0, "Int")
+      }
+    },
+  ])
+}
+

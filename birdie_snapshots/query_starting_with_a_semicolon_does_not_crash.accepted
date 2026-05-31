@@ -1,0 +1,44 @@
+---
+version: 1.5.1
+title: query starting with a semicolon does not crash
+file: ./test/squirrel_test.gleam
+test_name: query_starting_with_a_semicolon_does_not_crash_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/int
+import gleam/javascript/promise
+
+pub type QueryRow {
+  QueryRow(result: Int)
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use result <- decode.field(0, int_decoder())
+    decode.success(QueryRow(result:))
+  }
+
+  ";select 1 as result"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn int_decoder() {
+  decode.one_of(decode.int, or: [
+    {
+      use string <- decode.then(decode.string)
+      case int.parse(string) {
+        Ok(int) -> decode.success(int)
+        Error(_) -> decode.failure(0, "Int")
+      }
+    },
+  ])
+}
+

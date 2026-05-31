@@ -1,0 +1,27 @@
+---
+version: 1.5.1
+title: squirrel supports do blocks
+file: ./test/squirrel_test.gleam
+test_name: squirrel_supports_do_blocks_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(Nil), sql.SqlError)) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "
+  do $$ begin
+    select 1;
+  end $$;
+  "
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+

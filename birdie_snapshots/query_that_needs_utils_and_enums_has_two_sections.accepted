@@ -1,0 +1,62 @@
+---
+version: 1.5.1
+title: query that needs utils and enums has two sections
+file: ./test/squirrel_test.gleam
+test_name: query_that_needs_utils_and_enums_has_two_sections_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+import gleam/time/calendar.{type Date}
+
+pub type QueryRow {
+  QueryRow(squirrel_colour: SquirrelColour, date: Date)
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use squirrel_colour <- decode.field(0, squirrel_colour_decoder())
+    use date <- decode.field(1, date_decoder())
+    decode.success(QueryRow(squirrel_colour:, date:))
+  }
+
+  "select 'red'::squirrel_colour, 'Jan-2-1970'::date"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+pub type SquirrelColour {
+  LightBrown
+  Grey
+  Red
+}
+
+fn squirrel_colour_decoder() -> decode.Decoder(SquirrelColour) {
+  use squirrel_colour <- decode.then(decode.string)
+  case squirrel_colour {
+    "light brown" -> decode.success(LightBrown)
+    "grey" -> decode.success(Grey)
+    "red" -> decode.success(Red)
+    _ -> decode.failure(LightBrown, "SquirrelColour")
+  }
+}
+
+
+fn date_decoder() {
+  use dynamic <- decode.then(decode.dynamic)
+  let #(year, month, day) = date_from_sql(dynamic)
+  case calendar.month_from_int(month) {
+    Ok(month) -> decode.success(calendar.Date(year, month, day))
+    Error(_) -> decode.failure(calendar.Date(1970, calendar.January, 1), "Date")
+  }
+}
+
+@external(javascript, "./sql_ffi.mjs", "dateFromSql")
+fn date_from_sql(value: decode.Dynamic) -> #(Int, Int, Int)
+

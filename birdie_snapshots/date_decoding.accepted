@@ -1,0 +1,44 @@
+---
+version: 1.5.1
+title: date decoding
+file: ./test/squirrel_test.gleam
+test_name: date_decoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+import gleam/time/calendar.{type Date}
+
+pub type QueryRow {
+  QueryRow(res: Date)
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, date_decoder())
+    decode.success(QueryRow(res:))
+  }
+
+  "select 'Jan-2-1970'::date as res"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn date_decoder() {
+  use dynamic <- decode.then(decode.dynamic)
+  let #(year, month, day) = date_from_sql(dynamic)
+  case calendar.month_from_int(month) {
+    Ok(month) -> decode.success(calendar.Date(year, month, day))
+    Error(_) -> decode.failure(calendar.Date(1970, calendar.January, 1), "Date")
+  }
+}
+
+@external(javascript, "./sql_ffi.mjs", "dateFromSql")
+fn date_from_sql(value: decode.Dynamic) -> #(Int, Int, Int)
+

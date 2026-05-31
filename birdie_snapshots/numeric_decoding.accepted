@@ -1,0 +1,45 @@
+---
+version: 1.5.1
+title: numeric decoding
+file: ./test/squirrel_test.gleam
+test_name: numeric_decoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/float
+import gleam/int
+import gleam/javascript/promise
+
+pub type QueryRow {
+  QueryRow(res: Float)
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, numeric_decoder())
+    decode.success(QueryRow(res:))
+  }
+
+  "select 1.1::numeric as res"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn numeric_decoder() {
+  use string <- decode.then(decode.string)
+  case float.parse(string) {
+    Ok(float) -> decode.success(float)
+    Error(_) ->
+      case int.parse(string) {
+        Ok(int) -> decode.success(int.to_float(int))
+        Error(_) -> decode.failure(0.0, "Numeric")
+      }
+  }
+}
+

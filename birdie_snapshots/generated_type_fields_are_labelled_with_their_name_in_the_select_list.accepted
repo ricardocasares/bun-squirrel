@@ -1,0 +1,52 @@
+---
+version: 1.5.1
+title: generated type fields are labelled with their name in the select list
+file: ./test/squirrel_test.gleam
+test_name: generated_type_fields_are_labelled_with_their_name_in_the_select_list_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/int
+import gleam/javascript/promise
+import gleam/option.{type Option}
+
+pub type QueryRow {
+  QueryRow(acorns: Option(Int), squirrel_name: String)
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use acorns <- decode.field(0, decode.optional(int_decoder()))
+    use squirrel_name <- decode.field(1, decode.string)
+    decode.success(QueryRow(acorns:, squirrel_name:))
+  }
+
+  "
+select
+  acorns,
+  name as squirrel_name
+from
+  squirrel
+"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn int_decoder() {
+  decode.one_of(decode.int, or: [
+    {
+      use string <- decode.then(decode.string)
+      case int.parse(string) {
+        Ok(int) -> decode.success(int)
+        Error(_) -> decode.failure(0, "Int")
+      }
+    },
+  ])
+}
+

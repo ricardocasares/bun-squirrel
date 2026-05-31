@@ -1,0 +1,32 @@
+---
+version: 1.5.1
+title: varchar encoding
+file: ./test/squirrel_test.gleam
+test_name: varchar_encoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+
+pub type QueryRow {
+  QueryRow(res: Bool)
+}
+
+pub fn query(
+  db: sql.Connection,
+  arg_1: String,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, decode.bool)
+    decode.success(QueryRow(res:))
+  }
+
+  "select true as res where $1 = 'wibble'::varchar(6)"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.parameter(sql.text(arg_1))
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+

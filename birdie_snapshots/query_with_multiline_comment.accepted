@@ -1,0 +1,51 @@
+---
+version: 1.5.1
+title: query with multiline comment
+file: ./test/squirrel_test.gleam
+test_name: query_with_multiline_comment_test
+---
+//// This module contains the code to run the sql queries defined in
+//// `./test-directory`.
+//// > 🐿️ This module was generated automatically using v-test of
+//// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+////
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+
+/// A row you get from running the `query` query
+/// defined in `query.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v-test of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type QueryRow {
+  QueryRow(res: Bool)
+}
+
+/// This is a comment
+/// that goes over multiple lines!
+///
+/// > 🐿️ This function was generated automatically using v-test of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, decode.bool)
+    decode.success(QueryRow(res:))
+  }
+
+  "
+-- This is a comment
+-- that goes over multiple lines!
+select true as res
+"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+

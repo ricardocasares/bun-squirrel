@@ -1,0 +1,32 @@
+---
+version: 1.5.1
+title: generated type has the same name as the function but in pascal case
+file: ./test/squirrel_test.gleam
+test_name: generated_type_has_the_same_name_as_the_function_but_in_pascal_case_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+
+pub type QueryRow {
+  QueryRow(res: Bool)
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, decode.bool)
+    decode.success(QueryRow(res:))
+  }
+
+  "
+select true as res
+"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+

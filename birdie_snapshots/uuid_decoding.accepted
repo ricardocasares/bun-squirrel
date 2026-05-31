@@ -1,0 +1,40 @@
+---
+version: 1.5.1
+title: uuid decoding
+file: ./test/squirrel_test.gleam
+test_name: uuid_decoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+import youid/uuid.{type Uuid}
+
+pub type QueryRow {
+  QueryRow(res: Uuid)
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, uuid_decoder())
+    decode.success(QueryRow(res:))
+  }
+
+  "select gen_random_uuid() as res"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn uuid_decoder() {
+  use string <- decode.then(decode.string)
+  case uuid.from_string(string) {
+    Ok(uuid) -> decode.success(uuid)
+    Error(_) -> decode.failure(uuid.v7(), "Uuid")
+  }
+}
+

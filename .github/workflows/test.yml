@@ -1,0 +1,60 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/README.md"
+      - "**/CHANGELOG.md"
+  pull_request:
+    paths-ignore:
+      - "**/README.md"
+      - "**/CHANGELOG.md"
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        erlang: ["27", "28"]
+        postgres: ["postgres:17", "postgres:18"]
+
+    env:
+      DATABASE_URL: postgres://squirrel_test:postgres_password@localhost:5432/squirrel_test
+
+    # Setup a postgres service to run the tests.
+    services:
+      postgres:
+        image: ${{ matrix.postgres }}
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_PASSWORD: postgres_password
+          POSTGRES_USER: squirrel_test
+          POSTGRES_DB: squirrel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.erlang }}
+          gleam-version: "1.16.0"
+          rebar3-version: "3"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: gleam deps download
+      - run: ./integration_test
+      - run: gleam run -m birdie stale check
+      - run: gleam format --check src test

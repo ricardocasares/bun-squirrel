@@ -1,0 +1,30 @@
+---
+version: 1.5.1
+title: jsonb encoding
+file: ./test/squirrel_test.gleam
+test_name: jsonb_encoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+import gleam/json.{type Json}
+
+pub fn query(
+  db: sql.Connection,
+  arg_1: Json,
+) -> promise.Promise(Result(sql.Returned(Nil), sql.SqlError)) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "insert into jsons(jsonb) values($1)"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.parameter(json_value(json.to_string(arg_1)))
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+@external(javascript, "./sql_ffi.mjs", "jsonValue")
+fn json_value(json: String) -> sql.Value
+

@@ -1,0 +1,33 @@
+---
+version: 1.5.1
+title: uuid encoding
+file: ./test/squirrel_test.gleam
+test_name: uuid_encoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+import youid/uuid.{type Uuid}
+
+pub type QueryRow {
+  QueryRow(res: Bool)
+}
+
+pub fn query(
+  db: sql.Connection,
+  arg_1: Uuid,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, decode.bool)
+    decode.success(QueryRow(res:))
+  }
+
+  "select true as res where $1 = gen_random_uuid()"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.parameter(sql.text(uuid.to_string(arg_1)))
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+

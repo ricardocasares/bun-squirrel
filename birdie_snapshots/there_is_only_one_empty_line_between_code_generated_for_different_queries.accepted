@@ -1,0 +1,97 @@
+---
+version: 1.5.1
+title: there is only one empty line between code generated for different queries
+file: ./test/squirrel_test.gleam
+test_name: there_is_only_one_empty_line_between_code_generated_for_different_queries_test
+---
+//// This module contains the code to run the sql queries defined in
+//// `./test-directory`.
+//// > 🐿️ This module was generated automatically using v-test of
+//// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+////
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/int
+import gleam/javascript/promise
+
+/// A row you get from running the `one` query
+/// defined in `one.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v-test of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type OneRow {
+  OneRow(res: Int)
+}
+
+/// Runs the `one` query
+/// defined in `one.sql`.
+///
+/// > 🐿️ This function was generated automatically using v-test of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn one(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(OneRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, int_decoder())
+    decode.success(OneRow(res:))
+  }
+
+  "select 1 as res"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+/// A row you get from running the `two` query
+/// defined in `two.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v-test of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type TwoRow {
+  TwoRow(res: Int)
+}
+
+/// Runs the `two` query
+/// defined in `two.sql`.
+///
+/// > 🐿️ This function was generated automatically using v-test of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn two(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(TwoRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, int_decoder())
+    decode.success(TwoRow(res:))
+  }
+
+  "select 2 as res"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+// --- Encoding/decoding utils -------------------------------------------------
+
+/// A decoder for `Int`s coming from a Postgres query. Bun returns 64 bit
+/// integers (`bigint`/`int8`) as strings to avoid losing precision, so we
+/// accept both a number and a string.
+///
+fn int_decoder() {
+  decode.one_of(decode.int, or: [
+    {
+      use string <- decode.then(decode.string)
+      case int.parse(string) {
+        Ok(int) -> decode.success(int)
+        Error(_) -> decode.failure(0, "Int")
+      }
+    },
+  ])
+}
+

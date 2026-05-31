@@ -1,0 +1,49 @@
+---
+version: 1.5.1
+title: date encoding
+file: ./test/squirrel_test.gleam
+test_name: date_encoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/int
+import gleam/javascript/promise
+import gleam/string
+import gleam/time/calendar.{type Date}
+
+pub type QueryRow {
+  QueryRow(res: Bool)
+}
+
+pub fn query(
+  db: sql.Connection,
+  arg_1: Date,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, decode.bool)
+    decode.success(QueryRow(res:))
+  }
+
+  "select true as res where $1 = 'Jan-2-1970'::date"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.parameter(sql.text(date_to_string(arg_1)))
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn pad_int(value: Int, length: Int) -> String {
+  string.pad_start(int.to_string(value), to: length, with: "0")
+}
+
+fn date_to_string(date: calendar.Date) -> String {
+  let calendar.Date(year, month, day) = date
+  pad_int(year, 4)
+  <> "-"
+  <> pad_int(calendar.month_to_int(month), 2)
+  <> "-"
+  <> pad_int(day, 2)
+}
+

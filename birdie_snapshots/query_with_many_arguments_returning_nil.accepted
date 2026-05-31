@@ -1,0 +1,67 @@
+---
+version: 1.5.1
+title: query with many arguments returning nil
+file: ./test/squirrel_test.gleam
+test_name: query_with_many_arguments_returning_nil_comment_test
+---
+//// This module contains the code to run the sql queries defined in
+//// `./test-directory`.
+//// > 🐿️ This module was generated automatically using v-test of
+//// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+////
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+
+/// Runs the `query` query
+/// defined in `query.sql`.
+///
+/// > 🐿️ This function was generated automatically using v-test of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn query(
+  db: sql.Connection,
+  arg_1: String,
+  arg_2: List(String),
+  arg_3: List(String),
+  arg_4: List(String),
+  arg_5: List(String),
+  arg_6: List(String),
+  arg_7: List(String),
+  arg_8: List(String),
+  arg_9: List(String),
+) -> promise.Promise(Result(sql.Returned(Nil), sql.SqlError)) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "
+with a as (
+  select $1, *
+  from unnest(
+    $2::text[],
+    $3::text[],
+    $4::text[],
+    $5::text[],
+    $6::text[],
+    $7::text[],
+    $8::text[],
+    $9::text[]
+  )
+)
+select
+"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.parameter(sql.text(arg_1))
+  |> sql.parameter(sql.array(arg_2, fn(value) { sql.text(value) }))
+  |> sql.parameter(sql.array(arg_3, fn(value) { sql.text(value) }))
+  |> sql.parameter(sql.array(arg_4, fn(value) { sql.text(value) }))
+  |> sql.parameter(sql.array(arg_5, fn(value) { sql.text(value) }))
+  |> sql.parameter(sql.array(arg_6, fn(value) { sql.text(value) }))
+  |> sql.parameter(sql.array(arg_7, fn(value) { sql.text(value) }))
+  |> sql.parameter(sql.array(arg_8, fn(value) { sql.text(value) }))
+  |> sql.parameter(sql.array(arg_9, fn(value) { sql.text(value) }))
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+

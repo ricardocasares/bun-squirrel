@@ -1,0 +1,30 @@
+---
+version: 1.5.1
+title: name decoding
+file: ./test/squirrel_test.gleam
+test_name: name_decoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+
+pub type QueryRow {
+  QueryRow(res: String)
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, decode.string)
+    decode.success(QueryRow(res:))
+  }
+
+  "select 'name'::name as res"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+

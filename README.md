@@ -1,0 +1,428 @@
+# 🐿️ squirrel - type safe SQL in Gleam
+
+[![Package Version](https://img.shields.io/hexpm/v/squirrel)](https://hex.pm/packages/squirrel)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/squirrel/)
+
+[![Squirrel showcase](https://github.com/user-attachments/assets/4abd308b-b191-4296-a0b6-093db0595794)](https://github.com/user-attachments/assets/4abd308b-b191-4296-a0b6-093db0595794)
+
+> 🍴 **This is a fork of [Squirrel](https://github.com/giacomocavalieri/squirrel).**
+> Where the original generates code that talks to Postgres through
+> [`pog`](https://hexdocs.pm/pog/) on the Erlang target, this fork generates code
+> that runs on the **JavaScript target under [Bun](https://bun.com)**, using Bun's
+> built-in SQL client via the [`brioche`](https://hexdocs.pm/brioche/) package
+> instead. If you want the original Erlang/`pog` version, head upstream.
+
+## What's Squirrel?
+
+> For a video introduction on Squirrel's philosophy and general developer
+> experience you can check out my talk from FOSDEM 2026:
+> [You Don't Need an ORM.](https://www.youtube.com/watch?v=8vrEtKc-TBU)
+
+If you need to talk with a database in Gleam you'll have to write something like
+this:
+
+```gleam
+import brioche/sql
+import gleam/dynamic/decode
+
+pub type FindSquirrelRow {
+  FindSquirrelRow(name: String, owned_acorns: Int)
+}
+
+/// Find a squirrel and its owned acorns given its name.
+///
+pub fn find_squirrel(db: sql.Connection, name: String) {
+  let squirrel_row_decoder = {
+    use name <- decode.field(0, decode.string)
+    use owned_acorns <- decode.field(1, decode.int)
+    decode.success(FindSquirrelRow(name:, owned_acorns:))
+  }
+
+  "
+  select
+    name,
+    owned_acorns
+  from
+    squirrel
+  where
+    name = $1
+  "
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.parameter(sql.text(name))
+  |> sql.returning(squirrel_row_decoder)
+  |> sql.execute(db)
+}
+```
+
+This is probably fine if you have a few small queries but it can become quite
+the burden when you have a lot of queries:
+
+- The SQL query you write is just a plain string, you do not get syntax
+  highlighting, auto formatting, suggestions... all the little niceties you
+  would otherwise get if you where writing a plain `*.sql` file.
+- This also means you lose the ability to run these queries on their own with
+  other external tools, inspect them and so on.
+- You have to manually keep in sync the decoder with the query's output.
+
+One might be tempted to hide all of this by reaching for something like an ORM.
+Squirrel proposes a different approach: instead of trying to hide the SQL it
+_embraces it and leaves you in control._
+You write the SQL queries in plain old `*.sql` files and Squirrel will take care
+of generating all the corresponding functions.
+
+A code snippet is worth a thousand words, so let's have a look at an example.
+Instead of the hand written example shown earlier you can instead just write the
+following query:
+
+```sql
+-- we're in file `src/my_app/sql/find_squirrel.sql`
+-- Find a squirrel and its owned acorns given its name.
+select
+  name,
+  owned_acorns
+from
+  squirrel
+where
+  name = $1
+```
+
+And run `gleam run -m squirrel`. Just like magic you'll now have a type-safe
+function `find_squirrel` you can use just as you'd expect:
+
+```gleam
+import brioche/sql
+import gleam/javascript/promise
+import my_app/sql as queries
+
+pub fn main() {
+  let assert Ok(db) = sql.connect(sql.default_config())
+  // The generated functions run on Bun's SQL client, so they return a
+  // `Promise`. And it just works as you'd expect:
+  use result <- promise.await(queries.find_squirrel(db, "sandy"))
+  let assert Ok(sql.Returned(rows:, count: _)) = result
+  let assert [queries.FindSquirrelRow(name: "sandy", owned_acorns: 11_111)] = rows
+}
+```
+
+Behind the scenes Squirrel generates the decoders and functions you need; and
+it's pretty-printed, standard Gleam code (actually it's exactly like the hand
+written example I showed you earlier)!
+So now you get the best of both worlds:
+
+- You don't have to take care of keeping encoders and decoders in sync, Squirrel
+  does that for you.
+- And you're not compromising on type safety either: Squirrel is able to
+  understand the types of your query and produce a correct decoder.
+- You can stick to writing plain SQL in `*.sql` files. You'll have better
+  editor support, syntax highlighting and completions.
+- You can run each query on its own: need to `explain` a query?
+  No big deal, it's just a plain old `*.sql` file.
+
+## Usage
+
+Squirrel generates code that runs on the **JavaScript target** under the
+[Bun](https://bun.com) runtime, using Bun's built-in SQL client through the
+[`brioche`](https://hexdocs.pm/brioche/) package. Your project's `gleam.toml`
+should therefore target JavaScript/Bun:
+
+```toml
+target = "javascript"
+
+[javascript]
+runtime = "bun"
+```
+
+Add Squirrel as a dev dependency, plus the runtime dependencies the generated
+code relies on:
+
+```sh
+gleam add squirrel --dev
+gleam add brioche gleam_javascript gleam_time youid gleam_json
+```
+
+Then you can ask it to generate code running the `squirrel` module. Squirrel
+itself runs on the Erlang target (it talks to Postgres over its own protocol),
+so in a JavaScript project pass `--target erlang`:
+
+```sh
+gleam run -m squirrel --target erlang
+```
+
+> 🐿️ Generated modules that decode `date`, `json` or `jsonb` columns come with
+> a small companion `sql_ffi.mjs` file next to the generated `sql.gleam` — it is
+> generated for you and should be committed alongside it.
+
+And that's it! As long as you follow a couple of conventions Squirrel will just
+work:
+
+- Squirrel will look for all `*.sql` files in any `sql` directory under your
+  project's `src` directory.
+- Each `sql` directory will be turned into a single Gleam module containing a
+  function for each `*.sql` file inside it. The generated Gleam module is going
+  to be located in the same directory as the corresponding `sql` directory and
+  it's name is `sql.gleam`.
+- Each `*.sql` file _must contain a single SQL query._ And the name of the file
+  is going to be the name of the corresponding Gleam function to run that query.
+
+> Let's make an example. Imagine you have a Gleam project that looks like this
+>
+> ```txt
+> ├── src
+> │   ├── my_app
+> │   │   └── sql
+> │   │       ├── find_squirrel.sql
+> │   │       └── list_squirrels.sql
+> │   └── my_app.gleam
+> └── test
+>     └── my_app_test.gleam
+> ```
+>
+> Running `gleam run -m squirrel` will create a `src/my_app/sql.gleam` file
+> defining two functions `find_squirrel` and `list_squirrels` you can then
+> import and use in your code.
+
+### CLI Commands
+
+Squirrel offers the following commands to streamline your workflow:
+
+- `gleam run -m squirrel --target erlang`: Generates type-safe Gleam code for
+  all SQL queries found in `src/**/sql/*.sql`.
+- `gleam run -m squirrel check --target erlang`: Validates that the generated
+  Gleam code is up-to-date with the SQL queries. This is particularly useful to
+  run in a CI pipeline to make sure you don't forget to regenerate your code.
+
+> 🐿️ The `--target erlang` flag is only needed because Squirrel itself runs on
+> the Erlang target. The code it generates still targets JavaScript/Bun.
+
+### Talking to the database
+
+In order to understand the type of your queries, Squirrel needs to connect to
+the Postgres server where the database is defined. To connect, it will read the
+`DATABASE_URL` env variable that has to be a valid connection string with the
+following format:
+
+```txt
+postgres://user:password@host:port/database?connect_timeout=seconds
+```
+
+If a `DATABASE_URL` variable is not set, Squirrel will instead read your
+[Postgres env variables](https://www.postgresql.org/docs/current/libpq-envars.html)
+and use the following defaults if one is not set:
+
+- `PGHOST`: `"localhost"`
+- `PGPORT`: `5432`
+- `PGUSER`: `"postgres"`
+- `PGDATABASE`: the name of your Gleam project
+- `PGPASSWORD`: `""`
+- `PGCONNECT_TIMEOUT`: `5` seconds
+
+## Supported types
+
+Squirrel takes care of the mapping between Postgres types and Gleam types.
+This is needed in two places:
+
+- Gleam values need to be _encoded_ into Postgres values when you're filling in
+  the holes of a prepared statement (`$1`, `$2`, ...)
+- Postgres values need to be _decoded_ into a Gleam ones when you're reading the
+  rows returned by a query.
+
+The types that are currently supported are:
+
+| postgres type                                         | encoded as                                                                                 | decoded as                                                                                 |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `bool`                                                | `Bool`                                                                                     | `Bool`                                                                                     |
+| `text`, `char`, `bpchar`, `varchar`, `citext`, `name` | `String`                                                                                   | `String`                                                                                   |
+| `float4`, `float8`, `numeric`                         | `Float`                                                                                    | `Float`                                                                                    |
+| `int2`, `int4`, `int8`                                | `Int`                                                                                      | `Int`                                                                                      |
+| `json`, `jsonb`                                       | [`json.Json`](https://hexdocs.pm/gleam_json/gleam/json.html#Json)                          | `String`                                                                                   |
+| `uuid`                                                | [`uuid.Uuid`](https://hexdocs.pm/youid/youid/uuid.html#Uuid)                               | [`uuid.Uuid`](https://hexdocs.pm/youid/youid/uuid.html#Uuid)                               |
+| `bytea`                                               | `BitArray`                                                                                 | `BitArray`                                                                                 |
+| `date`                                                | [`calendar.Date`](https://hexdocs.pm/gleam_time/gleam/time/calendar.html#Date)             | [`calendar.Date`](https://hexdocs.pm/gleam_time/gleam/time/calendar.html#Date)             |
+| `time`                                                | [`calendar.TimeOfDay`](https://hexdocs.pm/gleam_time/gleam/time/calendar.html#TimeOfDay)   | [`calendar.TimeOfDay`](https://hexdocs.pm/gleam_time/gleam/time/calendar.html#TimeOfDay)   |
+| `timestamp`                                           | [`timestamp.Timestamp`](https://hexdocs.pm/gleam_time/gleam/time/timestamp.html#Timestamp) | [`timestamp.Timestamp`](https://hexdocs.pm/gleam_time/gleam/time/timestamp.html#Timestamp) |
+| `<type>[]` (where `<type>` is any supported type)     | `List(<type>)` (see caveat below)                                                          | `List(<type>)`                                                                             |
+| user-defined enum                                     | [Gleam custom type](https://tour.gleam.run/data-types/custom-types/)                       | [Gleam custom type](https://tour.gleam.run/data-types/custom-types/)                       |
+
+### A few Bun-specific caveats
+
+Because the generated code runs on Bun's SQL client, a couple of things behave
+slightly differently than they would with an Erlang Postgres driver:
+
+- **Array parameters are currently broken in Bun.** Passing a `List(_)` as a
+  query argument fails at runtime with `insufficient data left in message`
+  (this happens even with Bun's own array helper). Decoding arrays returned by a
+  query works fine — only passing them as parameters is affected.
+- **`timestamp` (without time zone) is decoded through a JavaScript `Date`**, so
+  the value is interpreted in the runtime's local timezone. Run your program
+  with `TZ=UTC` (or use `timestamptz`) if you need naive timestamps to round
+  trip exactly.
+- **64 bit integers (`int8`/`bigint`)** are returned by Bun as strings to avoid
+  losing precision; Squirrel parses them back into `Int`, but values larger than
+  `2^53` will lose precision on the JavaScript target.
+
+### Enums
+
+If your queries deal with user-defined enums Squirrel will automatically turn
+each one of those into a corresponding Gleam type to make sure your code is type
+safe.
+
+For example, consider the following enum:
+
+```sql
+create type squirrel_colour as enum (
+  'light_brown',
+  'grey',
+  'red'
+);
+```
+
+Squirrel turns that into a Gleam type that looks like this:
+
+```gleam
+pub type SquirrelColour {
+  LightBrown
+  Grey
+  Red
+}
+```
+
+> Squirrel will convert all the enum name and enum variants into PascalCase to
+> make sure the generated Gleam code is valid.
+> Notice how this transformation might result in having a name that is still not
+> valid Gleam code; for example if you had an enum variant `'1_first'` that
+> would become `1First` which is not valid Gleam!
+>
+> Squirrel won't try and trim invalid characters from the names and instead will
+> fail letting you know you should change those names into something that can be
+> turned into valid Gleam code.
+
+## FAQ
+
+### What flavour of SQL does squirrel support?
+
+Squirrel only supports Postgres. It supports all versions `>= 16`.
+
+### Why isn't squirrel configurable in any way?
+
+By going the "convention over configuration" route, Squirrel enforces that all
+projects adopting it will always have the same structure.
+If you need to contribute to a project using Squirrel you'll immediately know
+which directories and modules to look for.
+
+This makes it easier to get started with a new project and cuts down on all the
+bike shedding: _"Where should I put my queries?",_
+_"How many queries should go in on file?",_ ...
+
+### Can Squirrel read my `.env` file?
+
+The approach I recommend is either use your shell's built-in functionality for
+loading environment variables or use a convenience tool which builds upon that
+capability, such as [`direnv`](https://direnv.net).
+This way the environment is managed by the environment rather than the
+application itself, and all applications can take advantage of it rather than
+having to rebuild this functionality into each different application.
+
+### How do I deal with nullable query parameters?
+
+Squirrel works by inspecting the data that Postgres itself exposes about a query.
+Postgres doesn't expose any data about the nullability of query parameters, so
+Squirrel can't generate the correct nullable type when, for example, inserting
+in a nullable column.
+
+Let's take this example:
+
+```sql
+create table if not exists recipe(
+  id int primary key,
+  title text not null,
+  author uuid,  -- might be missing
+  description text -- might be missing
+);
+```
+
+Say we have a query to update the author field of a recipe:
+
+```sql
+-- update_recipe_author.sql
+update recipe
+set author = $1
+where id = $2;
+```
+
+The code generated by squirrel would look like this:
+
+```gleam
+pub fn update_recipe_author(db, arg1: Uuid, arg2: Int) { ... }
+//                              ^^^^^^^^^^ Could have been nullable!
+```
+
+So what can one do to work around this problem?
+
+1. If the query doesn't have many nullable arguments, nor is too complex it
+   could be totally fine to just define two queries: one with the actual
+   value, and one where the value is explicitly null.
+   That's what I'd recommend for something like the example I showed you
+   above:
+   ```sql
+   -- set_recipe_author.sql
+   update recipe
+   set author = $1
+   where id = $2;
+   ```
+   ```sql
+   -- remove_recipe_author.sql
+   update recipe
+   set author = null
+   where id = $2;
+   ```  
+2. Sometimes it's not possible to just duplicate the query: there might be
+   many nullable parameters, or complex logic that we would prefer not to
+   duplicate across multiple files. In that case we can pick a value to
+   represent `null` and add some additional checks in the query:
+   ```sql
+   -- update_recipe.sql
+   update recipe
+   set
+     author =
+       case $1
+         when '00000000-0000-0000-0000-000000000000' then null
+         else $1
+       end,
+     description =
+       case $2
+         when "" then null
+         else $2
+       end
+   where id = $3;
+   ```
+   If you feel like the query is getting unwieldy, remember you can always
+   refactor SQL and define functions or helpers (SQL is code like anything
+   else!)
+   ```sql
+   -- update_recipe.sql
+   update recipe
+   set
+     author = uuid_or_null($1),
+     description = string_or_null($2)
+   where id = $3;
+   ```
+   ```sql
+   create function string_or_null(value text)
+     returns text
+     language sql
+     immutable
+     return nullif(value, "");
+   ```
+
+## References
+
+This package draws a lot of inspiration from the amazing
+[yesql](https://github.com/krisajenkins/yesql) and
+[sqlx](https://github.com/launchbadge/sqlx).
+
+## Contributing
+
+If you think there’s any way to improve this package, or if you spot a bug don’t
+be afraid to open PRs, issues or requests of any kind! Any contribution is
+welcome 💜

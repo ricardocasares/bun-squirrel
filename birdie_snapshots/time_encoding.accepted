@@ -1,0 +1,45 @@
+---
+version: 1.5.1
+title: time encoding
+file: ./test/squirrel_test.gleam
+test_name: time_of_day_encoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/int
+import gleam/javascript/promise
+import gleam/string
+import gleam/time/calendar.{type TimeOfDay}
+
+pub type QueryRow {
+  QueryRow(res: Bool)
+}
+
+pub fn query(
+  db: sql.Connection,
+  arg_1: TimeOfDay,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, decode.bool)
+    decode.success(QueryRow(res:))
+  }
+
+  "select true as res where $1 = '11:10:00'::time"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.parameter(sql.text(time_of_day_to_string(arg_1)))
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn pad_int(value: Int, length: Int) -> String {
+  string.pad_start(int.to_string(value), to: length, with: "0")
+}
+
+fn time_of_day_to_string(time: calendar.TimeOfDay) -> String {
+  let calendar.TimeOfDay(hours, minutes, seconds, _) = time
+  pad_int(hours, 2) <> ":" <> pad_int(minutes, 2) <> ":" <> pad_int(seconds, 2)
+}
+

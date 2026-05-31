@@ -1,0 +1,69 @@
+---
+version: 1.5.1
+title: decode.success with long builder is properly formatted not breaking it on a different line
+file: ./test/squirrel_test.gleam
+test_name: decode_success_with_long_builder_is_properly_formatted_not_breaking_it_on_a_different_line_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/int
+import gleam/javascript/promise
+
+pub type QueryRow {
+  QueryRow(
+    first_column: Int,
+    second_column: Int,
+    third_column: Int,
+    fourth_column: Int,
+    fifth_column: Int,
+    sixth_column: Int,
+  )
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use first_column <- decode.field(0, int_decoder())
+    use second_column <- decode.field(1, int_decoder())
+    use third_column <- decode.field(2, int_decoder())
+    use fourth_column <- decode.field(3, int_decoder())
+    use fifth_column <- decode.field(4, int_decoder())
+    use sixth_column <- decode.field(5, int_decoder())
+    decode.success(QueryRow(
+      first_column:,
+      second_column:,
+      third_column:,
+      fourth_column:,
+      fifth_column:,
+      sixth_column:,
+    ))
+  }
+
+  "select
+  1 as first_column,
+  2 as second_column,
+  3 as third_column,
+  4 as fourth_column,
+  5 as fifth_column,
+  6 as sixth_column;"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn int_decoder() {
+  decode.one_of(decode.int, or: [
+    {
+      use string <- decode.then(decode.string)
+      case int.parse(string) {
+        Ok(int) -> decode.success(int)
+        Error(_) -> decode.failure(0, "Int")
+      }
+    },
+  ])
+}
+

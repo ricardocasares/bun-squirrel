@@ -1,0 +1,32 @@
+---
+version: 1.5.1
+title: array encoding
+file: ./test/squirrel_test.gleam
+test_name: array_encoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/javascript/promise
+
+pub type QueryRow {
+  QueryRow(res: Bool)
+}
+
+pub fn query(
+  db: sql.Connection,
+  arg_1: List(Int),
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, decode.bool)
+    decode.success(QueryRow(res:))
+  }
+
+  "select true as res where $1 = array[1, 2, 3]"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.parameter(sql.array(arg_1, fn(value) { sql.int(value) }))
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+

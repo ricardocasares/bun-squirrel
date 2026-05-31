@@ -1,0 +1,52 @@
+---
+version: 1.5.1
+title: time decoding
+file: ./test/squirrel_test.gleam
+test_name: time_of_day_decoding_test
+---
+
+import brioche/sql
+import gleam/dynamic/decode
+import gleam/int
+import gleam/javascript/promise
+import gleam/string
+import gleam/time/calendar.{type TimeOfDay}
+
+pub type QueryRow {
+  QueryRow(res: TimeOfDay)
+}
+
+pub fn query(
+  db: sql.Connection,
+) -> promise.Promise(Result(sql.Returned(QueryRow), sql.SqlError)) {
+  let decoder = {
+    use res <- decode.field(0, time_of_day_decoder())
+    decode.success(QueryRow(res:))
+  }
+
+  "select '11:10:01'::time as res"
+  |> sql.query
+  |> sql.format(sql.Tuple)
+  |> sql.returning(decoder)
+  |> sql.execute(db)
+}
+
+
+fn time_of_day_decoder() {
+  use string <- decode.then(decode.string)
+  case string.split(string, on: ":") {
+    [hours, minutes, rest] -> {
+      let seconds = case string.split_once(rest, on: ".") {
+        Ok(#(seconds, _)) -> seconds
+        Error(_) -> rest
+      }
+      case int.parse(hours), int.parse(minutes), int.parse(seconds) {
+        Ok(hours), Ok(minutes), Ok(seconds) ->
+          decode.success(calendar.TimeOfDay(hours, minutes, seconds, 0))
+        _, _, _ -> decode.failure(calendar.TimeOfDay(0, 0, 0, 0), "TimeOfDay")
+      }
+    }
+    _ -> decode.failure(calendar.TimeOfDay(0, 0, 0, 0), "TimeOfDay")
+  }
+}
+
